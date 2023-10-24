@@ -4,6 +4,7 @@
     console.clear();
     const weight = 0.3;
     const maxFloor = floors.length - 1;
+    const eleNum = elevators.length;
     elevators.forEach( elevator => {
       elevator.force_updown = new Array(floors.length).fill(false)
       elevator.lastStop = 0;
@@ -21,27 +22,38 @@
       return Math.abs(elevator.currentFloor() - floorNum);
     };
 
-    let findIdle = function (floorNum) {
-      return elevators.filter((elevator) => (elevator.destinationQueue.length == 0))
-        .sort((a, b) => (distance(a, floorNum) - distance(b, floorNum)));
+    let findNearestIdle = function (floorNum) {
+      idleEvevators = elevators.filter((elevator) => (elevator.destinationQueue.length == 0))
+      console.log(`idleEvevators length is ${idleEvevators.length}`)
+      return idleEvevators.sort((a, b) => (distance(a, floorNum) - distance(b, floorNum)));
     };
 
     function getCurrentDirection(elevator) {
       curr = elevator.currentFloor()
       prev = elevator.lastStop
-      if (elevator.destinationQueue.length == 0) {
+      queue = elevator.destinationQueue
+      if (queue.length == 0) {
         if (prev == curr) return 'idle'
         if (prev > curr) return 'down'
         if (prev < curr) return 'up'
       }
-      next = elevator.destinationQueue[0]
-      if (next == curr) return 'idle'
+      next = queue[0]
       if (next < curr) return 'down'
       if (next > curr) return 'up'
+
+      if ( typeof queue[1] === 'undefined')  {
+        if (prev == curr) return 'idle'
+        if (prev > curr) return 'down'
+        if (prev < curr) return 'up'
+      } else {
+        if (next == queue[1]) throw "No idle bcz no duplicated num in queu"
+        if (next > queue[1]) return 'down'
+        if (next < queue[1]) return 'up'  
+      }
     }
     // https://github.com/akadrac/elevatorsaga/blob/master/solution.js
     function sortQueue(elevator) {
-      let dir = getCurrentDirection(elevator);
+      let dirMoving = getCurrentDirection(elevator);
 
       // 去除重复数字
       const uniqueSet = new Set(elevator.destinationQueue);
@@ -58,20 +70,22 @@
       UpFloor.sort((a, b) => a - b);
       DownFloor.sort((a, b) => b - a);
 
-      // dir would nerver be idle as it has been pushed
-      if (dir == "down" ) {
-        console.info("going down")
+      // 
+      if (dirMoving == "down" ) {
+        console.info("currently going down")
         if (isStayCurrentFloor) DownFloor.unshift(onFloorNum);
         elevator.destinationQueue = DownFloor.concat(UpFloor) 
         return;
       }
-      if (dir == "up") {
-        console.info("going up")
+      if (dirMoving == "up") {
+        console.info("currently going up")
         if (isStayCurrentFloor) UpFloor.unshift(onFloorNum)
         elevator.destinationQueue = UpFloor.concat(DownFloor) 
         return;
       }
-      throw "idle ERROR"
+      // dir would nerver be idle, although it has been pushed
+      // when current is 0, push is 0(from outside btn), the status is idel
+      console.warn('Currently Unusual idel status')
     };
 
     // Put the floor in elevator's queue 
@@ -81,6 +95,7 @@
       let queuebefore = [...elevator.destinationQueue]
       if (elevator.lastStop === floorNum) {
         elevator.goToFloor(floorNum)
+        elevator.force_updown[floorNum] = true
         console.info(`Previous Queue is: ${queuebefore}, then ${elevator.destinationQueue}, push to tail`)
         return;
       }
@@ -131,37 +146,44 @@
       }
     };
 
-    function findElevatorsStoppedAtFloor(floor, recorder) {
-      let foundElevators = elevators.filter((elevator) => (elevator.destinationQueue.includes(floor.floorNum())));
+    function findElevatorsStoppedAtFloor(floor) {
+      let recorder = floor.recorder
+      let floorNum = floor.floorNum
+      let foundElevators = elevators.filter((elevator) => (elevator.destinationQueue.includes(floorNum)));
       if (foundElevators.count === 0) return foundElevators;
 
       foundElevators = foundElevators.filter((elevator) => {
-        let dir = getDirectionWhenPassFloor(elevator, floor.floorNum());
-        if (dir == "idle") { return true; }
-        if (dir == "up" && recorder["up"]) {return true; }
-        if (dir == "down" && recorder["down"]) {return true; }
+        let dirPassing = getDirectionWhenPassFloor(elevator, floorNum);
+        console.log(`dirPassing is ${dirPassing}, recoder is ${recoder}`)
+        if (dirPassing == "idle") { return true; }
+        if (dirPassing == "up" && recorder["up"]) {return true; }
+        if (dirPassing == "down" && recorder["down"]) {return true; }
         return false;
       })
       return foundElevators
     };
     
-    function findElevatorWithMinDistance(targetNumber) {
+    function findElevatorWithMinDistance(floorNum, dirPressed) {
       const satisfiedElevators = new Map();
     
       for (const elevator of elevators) {
-        console.log("elevator.loadFactor() is " + elevator.loadFactor());
-        if (elevator.loadFactor() == 1) {
+        // 如果floorNum是顶楼/底楼，且电梯方向是上/下，则它满足
+        // 如果它比某部电梯的queue最大值都大，且此电梯向上运动，“且它按的方向是向上”，找出最近的一部电梯，它来接
+        // 如果它比某部电梯的queue最小值都小，且此电梯向下运动，“且它按的方向是向下”，找出最近的一部电梯，它来接
+        dirMoving = getCurrentDirection(elevator)
+        if ((floorNum == 0 && dirMoving == 'down') || (floorNum == maxFloor && dirMoving == 'up')) {
+          satisfiedElevators.set(elevator.distance);
           continue;
-        } 
-          
+        }
         const destinationQueue = elevator.destinationQueue;
         if (destinationQueue.length > 0) {
           const maxQueueValue = Math.max(...destinationQueue);
           const minQueueValue = Math.min(...destinationQueue);
     
           // Check if the elevator's queue meets the conditions
-          if (maxQueueValue < targetNumber || minQueueValue > targetNumber) {
-            const distance = Math.abs(maxQueueValue - targetNumber);
+          if ((maxQueueValue < floorNum && dirMoving == 'down' && dirPressed == 'down') || 
+              (minQueueValue > floorNum && dirMoving == 'up' && dirPressed == 'up')) {
+            const distance = Math.abs(maxQueueValue - floorNum);
             satisfiedElevators.set(elevator, distance);
           }
         }
@@ -187,20 +209,23 @@
     };
 
     function findElevatorWithPassingbyAndLoadFactor(floorNum) {
+      // 如果上下两层之内有电梯即将到达（路过电梯），而且满载率小于0.5，则由它来接乘客
       elevators.forEach(elevator => {
-        if (elevator.loadFactor() <= 0.7) {
-          onFloorNum = elevator.currentFloor();
-          if (onFloorNum >= floorNum && onFloorNum <= floorNum + 2 && getDirectionWhenPassFloor(elevator, floorNum) != "down") { return elevator;}
-          if (onFloorNum <= floorNum && onFloorNum >= floorNum - 2 && getDirectionWhenPassFloor(elevator, floorNum) != "up") { return elevator;}
+        let dirMoving = getCurrentDirection(elevator)
+        console.log(`elevator.loadFactor is ${elevator.loadFactor()}`)
+        if (elevator.loadFactor() <= 0.5) {
+          let onFloorNum = elevator.currentFloor();
+          if (onFloorNum >= floorNum && onFloorNum <= floorNum + 3 && dirMoving == "down") { return elevator;}
+          if (onFloorNum <= floorNum && onFloorNum >= floorNum - 3 && dirMoving == "up") { return elevator;}
         }
       })
       return null
     }
 
-    function selectElevatorToPickUp(floor, dir) {
+    function selectElevatorToPickUp(floor, dirPressed) {
       const floorNum = floor.floorNum()
       // 如果在某个电梯的queue里，且方向一致，由这个电梯来接，如果有多个，则找满载率最小*距离最近的
-      let elevatorsWithThisFloor = findElevatorsStoppedAtFloor(floor, floor.recorder);
+      let elevatorsWithThisFloor = findElevatorsStoppedAtFloor(floor);
       if (elevatorsWithThisFloor.length > 0) {
         const resultElevator = elevatorsWithThisFloor.reduce((bestElevator, elevator) => {
           let loadFactor1 = bestElevator.loadFactor();
@@ -216,51 +241,63 @@
           }
         })
         putFloorIntoElevatorQueue(resultElevator, floorNum)
-        floor.recorder[dir] = false
+        floor.recorder[dirPressed] = false
         console.info("mode 1")
         return;
       }
 
-      // 如果它比某部电梯的queue最大值都大，且此电梯向上运动，找出最近的一部电梯，它来接
-      // 如果它比某部电梯的queue最小值都小，且此电梯向下运动，找出最近的一部电梯，它来接
-      let resultElevator = findElevatorWithMinDistance(floorNum)
+      console.info("mode 1 not pick - in queue and dir match")
+        // 如果floorNum是顶楼/底楼，且电梯方向是上/下，则它满足
+        // 如果它比某部电梯的queue最大值都大，且此电梯向上运动，“且它按的方向是向上”，找出最近的一部电梯，它来接
+        // 如果它比某部电梯的queue最小值都小，且此电梯向下运动，“且它按的方向是向下”，找出最近的一部电梯，它来接
+      let resultElevator = findElevatorWithMinDistance(floorNum, dirPressed)
       if (resultElevator != null) {
         putFloorIntoElevatorQueue(resultElevator, floorNum)
-        floor.recorder[dir] = false
+        floor.recorder[dirPressed] = false
         console.info("mode 2")
         return;
       }
-  
-      // 如果上下两层之内有电梯即将到达（路过电梯），而且满载率小于0.7，则由它来接乘客
+
+      console.info("mode 2 not pick - dir match")
+      // 如果上下三层之内有电梯即将到达（路过电梯），而且满载率小于0.5，则由它来接乘客
+      // TODO_em 这个也需要force updown
       resultElevator =  findElevatorWithPassingbyAndLoadFactor(floorNum)
       if (resultElevator != null) {
         putFloorIntoElevatorQueue(resultElevator, floorNum)
-        floor.recorder[dir] = false
+        floor.recorder[dirPressed] = false
+        resultElevator.force_updown[floorNum] = true
         console.info("mode 3")
         return;
       }
 
+      console.info("mode 3 not pick - 3 floors nearby passing")
       // 找个空的，find an idle elevator if possible，
-      let choice = findIdle(floorNum);
-      if (choice.length) {
-        resultElevator = choice[0]
+      let idleEvevators = findNearestIdle(floorNum);
+      if (idleEvevators.length) {
+        console.log (`     There are idle elevators`)
+        resultElevator = idleEvevators[0]
         putFloorIntoElevatorQueue(resultElevator, floorNum)
-        floor.recorder[dir] = false
+        floor.recorder[dirPressed] = false
         console.info("mode 4")
         return;
       }
 
+      
+      // 非顶楼，且按的方向和电梯运动方向不一致，就需要用force updown了
+
+      console.info("mode 4 not pick - idle come")
+      
       // 如果在某个电梯的queue里，由这个电梯来接
       for (elevator of elevators) {
         if (elevator.destinationQueue.includes(floorNum)) {
-          // TODO_em: 强制到达时打开双向箭头
           elevator.force_updown[floorNum] = true
-          floor.recorder[dir] = false
+          floor.recorder[dirPressed] = false
           console.info("mode 5")
           return;
         }
       }
 
+      console.info("mode 5 not pick - in queue come")
       // 如果也没有空的，找一个满载率最低的电梯
       resultElevator = elevators.reduce((bestElevator, elevator) => {
         let loadFactor1 = bestElevator.loadFactor();
@@ -272,8 +309,9 @@
         }
       })
       putFloorIntoElevatorQueue(resultElevator, floorNum)
-      floor.recorder[dir] = false
-      console.info("mode 6")
+      elevator.force_updown[floorNum] = true
+      floor.recorder[dirPressed] = false
+      console.info("mode 6 - lowest loadfactor")
       return;
     };
 
@@ -307,6 +345,7 @@
         elevator.lastLastStop = elevator.lastStop
         elevator.lastStop = floorNum
         
+        console.log(`   elevator.force_updown array is ${elevator.force_updown} `)
         // 双向箭头标志位为true时，up = down = true
         // 通过queue的下一站来确定是上还是下。
         if (elevator.force_updown[floorNum]) {
@@ -320,6 +359,7 @@
         if (elevator.destinationQueue.length == 0) {
           elevator.goingUpIndicator(true)
           elevator.goingDownIndicator(true)
+          console.log(`%cstop at: ${floorNum}, queue [idel],  disp up and down`)
           return;
         }
         if (elevator.destinationQueue[0] > floorNum ) {
