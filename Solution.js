@@ -92,7 +92,36 @@
       console.warn('elevator[${elevator.index}] Currently Unusual idel status')
     };
 
-    function insertFloorIntoElevatorQueue(elevator, floor) {
+    // 给出一列数组，找出第一个极大值并返回index
+    function findFirstMaxIndex(arr) {
+      if (arr.length == 0) throw "wrong input for findFirstMaxIndex"
+      if (arr.length == 1) return 0;
+      for (let i = 0; i < arr.length - 1; i++) {
+        if (arr[i] > arr[i+1]) return i;
+      }
+      return arr.length - 1;
+    }
+    function findFirstMinIndex(arr) {
+      if (arr.length == 0) throw "wrong input for findFirstMinIndex"
+      if (arr.length == 1) return 0;
+      for (let i = 0; i < arr.length - 1; i++) {
+        if (arr[i] < arr[i+1]) return i;
+      }
+      return arr.length - 1;
+    }
+
+    function findIndexes(queue, floorNum) {
+      var indexes = [];
+    
+      for (var i = 0; i < queue.length; i++) {
+        if (queue[i] === floorNum) {
+          indexes.push(i);
+        }
+      }
+    
+      return indexes;
+    }
+    function insertFloorIntoElevatorQueue(elevator, floor, mode) {
       // Get elevator's current direction
       const dir = getCurrentDirection(elevator);
       // Get elevator's destination queue
@@ -101,7 +130,51 @@
       const floorNum = floor.floorNum();
       // Get the pressed direction
       const dirPressed = floor.recorder;
+      // Get the current floor number
+      const curr = elevator.currentFloor();
 
+      // 如果floorNum是顶楼/底楼，筛选方向一致，找最近的来接 (insert into queue)
+      switch (mode) {
+      case 1:
+        // 如果floorNum是顶楼，则在它的queue里找到第一个极大值，把floorNum插在它后面
+        if (floorNum == maxFloor) {
+          let index = findFirstMaxIndex(queue);
+          elevator.destinationQueue.splice(index + 1, 0, floorNum);
+        }
+        // 如果floorNum是底楼，则在它的queue里找到第一个极小值，把floorNum插在它后面
+        if (floorNum == 0) {
+          let index = findFirstMinIndex(queue);
+          elevator.destinationQueue.splice(index + 1, 0, floorNum);
+        }
+        break;
+      case 2:
+        // 如果它比某部电梯的queue最大值都大，且此电梯向上运动，“且它按的方向是向上”，找出最近的一部电梯，它来接
+        // 如果它比某部电梯的queue最小值都小，且此电梯向下运动，“且它按的方向是向下”，找出最近的一部电梯，它来接
+      }
+
+
+      // 如果有电梯即将到达且方向一致（路过电梯），而且满载率小于0.75，则由它来接乘客 (insert into queue)
+      //     如果它比某部电梯的queue最大值都大，且此电梯向上运动，“且它按的方向是向上”，找出最近的一部电梯，它来接 (insert into queue)
+
+      // 如果电梯在上行，且dirPressed是up，且floorNum比curr大，把floorNum插在findFirstMaxIndex后面
+      // 如果电梯在上行，且dirPressed是up，且floorNum和curr相等，把floorNum插在queue的最前面
+      // 如果电梯在上行，且dirPressed是up，且floorNum比curr小，把floorNum插在findFirstMaxIndex返回的index后面找到一个比floorNum小的数，把floorNum插在它前面
+      // 如果电梯在上行，且dirPressed是down，且floorNum和curr相等，且queue为空, do nothing
+      // 如果电梯在上行，且dirPressed是down，且floorNum比curr大，在findFirstMaxIndex返回的index后面找到一个比floorNum小的数，把floorNum插在它前面
+      // 如果电梯在上行，且dirPressed是down，且floorNum和curr相等，且queue不为空，在findFirstMaxIndex返回的index后面找到一个比floorNum小的数，把floorNum插在它前面
+      // 如果电梯在上行，且dirPressed是down，且floorNum比curr小, 在findFirstMaxIndex返回的index后面找到一个比floorNum小的数，把floorNum插在它前面
+
+      // 如果电梯在下行，且dirPressed是up，且floorNum比curr大，
+      // 如果电梯在下行，且dirPressed是up，且floorNum和curr相等
+      // 如果电梯在下行，且dirPressed是up，且floorNum比curr小
+      // 如果电梯在下行，且dirPressed是down，且floorNum比curr大
+      // 如果电梯在下行，且dirPressed是down，且floorNum和curr相等
+      // 如果电梯在下行，且dirPressed是down，且floorNum比curr小，
+
+
+
+
+  
       // 向上、下运动 * （顶.最大、底.最小楼 + 比curr高、低） * ( dirPressed is up/down)
       if (dir === "up") {
         // if current floor is higher than the floorNum, insert the floorNum into the queue's downlist
@@ -144,23 +217,31 @@
     // only return up or down, no idle
     function getDirectionStopAtFloor(elevator, floorNum) {
       const queue = elevator.destinationQueue;
-
       if (!queue.includes(floorNum)) { throw "false usage, much include floorNum in queue"}
-      floorNumIndex = queue.indexOf(floorNum)
-      if (floorNumIndex === queue.length - 1) {
-        if (floorNumIndex === 0) {
-          dir = getCurrentDirection(elevator);
-          if (dir == 'idle') throw "Wrong idle, because if idle elevator exists, callstack should not come here"
-          return dir;
-        }  
-        if (queue[floorNumIndex - 1] > floorNum) return 'down'
-        if (queue[floorNumIndex - 1] < floorNum) return 'up'
-        if (queue[floorNumIndex - 1] == floorNum) throw "sort error happened, no identical number should be in queue"
-      };
-      const nextFloor = queue[floorNumIndex + 1];
-      if (nextFloor > floorNum) { return "up"; }
-      if (nextFloor < floorNum) { return "down"; }
-      if (nextFloor = floorNum) { throw 'wrong queue' }
+
+      if (floorNum == 0) return 'up'
+      if (floorNum == maxFloor) return 'down'
+
+      // 找到queue里的所有floorNum的index
+      // todo em: 有可能有多个相同的floorNum，这里只找到第一个
+      const indexes = findIndexes(queue, floorNum);
+      if (indexes.length == 1) {
+        floorNumIndex = queue.indexOf(floorNum)
+        if (floorNumIndex === queue.length - 1) {
+          if (floorNumIndex === 0) {
+            dir = getCurrentDirection(elevator);
+            if (dir == 'idle') throw "Wrong idle, because if idle elevator exists, callstack should not come here"
+            return dir;
+          }  
+          if (queue[floorNumIndex - 1] > floorNum) return 'down'
+          if (queue[floorNumIndex - 1] < floorNum) return 'up'
+          if (queue[floorNumIndex - 1] == floorNum) throw "sort error happened, no identical number should be in queue"
+        };
+        const nextFloor = queue[floorNumIndex + 1];
+        if (nextFloor > floorNum) { return "up"; }
+        if (nextFloor < floorNum) { return "down"; }
+        if (nextFloor = floorNum) { throw 'wrong queue' }
+      }
     };
 
     function findElevator_StoppedAndDirMatch(floorNum, dirPressed) {
@@ -193,8 +274,8 @@
       // 如果floorNum是顶楼/底楼，且电梯方向是上/下，则它满足
       let elevatorsRightDir = elevators.filter((elevator) => {
         dirMoving = getCurrentDirection(elevator)
-        if (floorNum && dirMoving == 'down' ||
-            !floorNum && dirMoving == 'up') {
+        if (floorNum && dirMoving == 'up' ||
+            !floorNum && dirMoving == 'down') {
               return true;
         } else {
           return false;
@@ -212,8 +293,6 @@
         return loadFactor1 - loadFactor2 + (distance1 - distance2) *0.2
       });
       return elevatorsRightDir[0];
-
-
     };
 
     function findElevator_WithMinDistance(floorNum, dirPressed) {
@@ -274,32 +353,46 @@
       const floorNum = floor.floorNum()
       let resultElevator
 
-      // 找个空的，find an idle elevator if possible，
+      // 找个空的，find an idle elevator if possible，(push into queue)
+      // 如果在某个电梯的queue里，且方向一致，由这个电梯来接，这里注意要区分顶底楼和非顶底楼 (do nothing)
       // 如果floorNum是顶楼/底楼，筛选方向一致，找最近的来接 (insert into queue)
-      // 如果在某个电梯的queue里，且方向一致，由这个电梯来接，如果有多个，则找满载率最小*距离最近的 (do nothing)
+      // 如果有电梯即将到达且方向一致（路过电梯），而且满载率小于0.75，则由它来接乘客 (insert into queue)
       // 如果它比某部电梯的queue最大值都大，且此电梯向上运动，“且它按的方向是向上”，找出最近的一部电梯，它来接 (insert into queue)
-      // 如果有电梯即将到达且方向一致（路过电梯），而且满载率小于0.85，则由它来接乘客 (insert into queue)
+      // 如果它比某部电梯的queue最大值都大，且此电梯向上运动，“它按的方向是向下但它属于离底层远离高层近”，找出最近的一部电梯，它来接 (insert into queue but forceupdown is true)
+      // 电梯在向上运动，楼层的方向是向下，
+
       // 如果在某个电梯的queue里，，找一个factor最小的电梯来接，由这个电梯来接(do nothing but forceupdown is true)
       // 如果也没有空的，找一个满载率最低的电梯, 由这个电梯来接 (insert into queue)
 
 
-      // 找个空的，find an idle elevator if possible，
+      // 找个空的，find an idle elevator if possible，(push into queue)
       let idleEvevators = findSortedIdle(floorNum);
       if (idleEvevators.length) {
         resultElevator = idleEvevators[0]
+        resultElevator.goToFloor(floorNum)
         resultElevator.force_updown[floorNum] = true
-        putFloorIntoElevatorQueue(resultElevator, floorNum)
         floor.recorder[dirPressed] = false
         console.info(`elevator[${resultElevator.index}] mode 1 idle`)
         return;
       }
       console.info("mode 1 not pick - no idle come")
 
-      // 如果floorNum是顶楼/底楼，筛选方向一致，找最近的来接
+      // 如果在某个电梯的queue里，且方向一致，由这个电梯来接，这里注意要区分顶底楼和非顶底楼 (do nothing)
+      resultElevator = findElevator_StoppedAndDirMatch(floorNum, dirPressed);
+      if (resultElevator != null) {
+        // Just Do nothing, because the floor is already in queue
+        floor.recorder[dirPressed] = false
+        console.info(`elevator[${resultElevator.index}] mode 2 in queue and dir match`)
+        return;
+      }
+      console.info(`mode 2 not pick - in queue and dir match`)
+      
+      // 如果floorNum是顶楼/底楼，筛选方向一致，找最近的来接 (insert into queue)
       if (floorNum == 0 || floorNum == maxFloor) {
         resultElevator = findElevator_ForExtremeFloor(floorNum)
         if (resultElevator != null) {
-          putFloorIntoElevatorQueue(resultElevator, floorNum)
+          // putFloorIntoElevatorQueue(resultElevator, floorNum)
+          insertFloorIntoElevatorQueue(resultElevator, floor, 1)
           floor.recorder[dirPressed] = false
           console.info(`elevator[${resultElevator.index}] mode 2 extrame floor`)
           return;
@@ -307,15 +400,6 @@
       }
       console.info("mode 2 not pick - not extrame floor")
 
-      // 如果在某个电梯的queue里，且方向一致，由这个电梯来接，如果有多个，则找满载率最小*距离最近的
-      resultElevator = findElevator_StoppedAndDirMatch(floorNum, dirPressed);
-      if (resultElevator != null) {
-        // Just Do nothing, because the floor is already in queue
-        floor.recorder[dirPressed] = false
-        console.info(`elevator[${resultElevator.index}] mode 3 in queue and dir match`)
-        return;
-      }
-      console.info(`mode 3 not pick - in queue and dir match`)
 
       // 如果它比某部电梯的queue最大值都大，且此电梯向上运动，“且它按的方向是向上”，找出最近的一部电梯，它来接
       // 如果它比某部电梯的queue最小值都小，且此电梯向下运动，“且它按的方向是向下”，找出最近的一部电梯，它来接
